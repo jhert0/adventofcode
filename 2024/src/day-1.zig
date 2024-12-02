@@ -40,12 +40,17 @@ pub fn main() !void {
     std.mem.sort(i32, numbers2, {}, std.sort.asc(i32));
 
     var total: u32 = 0;
+    var similarity: u32 = 0;
     for (0..numbers1.len) |i| {
         const diff = @abs(numbers1[i] - numbers2[i]);
         total += diff;
+
+        const count = std.mem.count(i32, numbers2, &[_]i32{numbers1[i]});
+        similarity += @intCast(numbers1[i] * @as(i32, @intCast(count)));
     }
 
     try stdout.print("total: {any}\n", .{total});
+    try stdout.print("similarity: {any}\n", .{similarity});
 
     try bw.flush();
 }
