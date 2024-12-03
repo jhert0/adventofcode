@@ -1,22 +1,31 @@
 const std = @import("std");
+const ArrayListUnmanaged = std.ArrayListUnmanaged;
 
-fn get_direction(val1: i8, val2: i8) i8 {
-    const diff = val1 - val2;
-    if (diff > 0) {
-        return 1;
+fn isReportSafe(report: []i8) bool {
+    const increasing = report[0] < report[1];
+
+    for (0..report.len - 1) |i| {
+        const diff = @abs(report[i] - report[i + 1]);
+        if (diff == 0 or diff > 3) {
+            return false;
+        }
+
+        if (increasing and report[i] >= report[i + 1]) {
+            return false;
+        }
+
+        if (!increasing and report[i] <= report[i + 1]) {
+            return false;
+        }
     }
 
-    if (diff < 0) {
-        return -1;
-    }
-
-    return 0;
+    return true;
 }
 
 pub fn main() !void {
-    const stdout_file = std.io.getStdOut().writer();
-    var bw = std.io.bufferedWriter(stdout_file);
-    const stdout = bw.writer();
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+    defer _ = gpa.deinit();
 
     var file = try std.fs.cwd().openFile("inputs/day2.txt", .{});
     defer file.close();
@@ -24,46 +33,38 @@ pub fn main() !void {
     var buf_reader = std.io.bufferedReader(file.reader());
     var stream = buf_reader.reader();
 
-    var last_level: ?i8 = null;
-    var last_direction: ?i8 = null;
-    var unsafe_reports: u16 = 0;
-    var total_reports: u16 = 0;
+    var safe_reports: u16 = 0;
+    var safe_dampened: u16 = 0;
 
     var buf: [128]u8 = undefined;
     while (try stream.readUntilDelimiterOrEof(&buf, '\n')) |line| {
         var it = std.mem.splitScalar(u8, line, ' ');
 
-        var unsafe = false;
+        var report: ArrayListUnmanaged(i8) = .empty;
+
         while (it.next()) |c| {
-            const current_level = try std.fmt.parseInt(i8, c, 10);
-
-            if (last_level == null) {
-                last_level = current_level;
-                continue;
-            }
-
-            const diff = @abs(last_level.? - current_level);
-            const direction = get_direction(last_level.?, current_level);
-            if ((last_direction != direction and last_direction != null) or diff > 3) {
-                unsafe = true;
-                break;
-            }
-
-            last_level = current_level;
-            last_direction = direction;
+            const level = try std.fmt.parseInt(i8, c, 10);
+            try report.append(allocator, level);
         }
 
-        last_level = null;
-        last_direction = null;
+        const arr = try report.toOwnedSlice(allocator);
+        defer allocator.free(arr);
 
-        if (unsafe) {
-            unsafe_reports += 1;
+        if (isReportSafe(arr)) {
+            safe_reports += 1;
+        } else {
+            for (0..arr.len) |j| {
+                const modified = try std.mem.concat(allocator, i8, &[_][]const i8{ arr[0..j], arr[j + 1 ..] });
+                defer allocator.free(modified);
+
+                if (isReportSafe(modified)) {
+                    safe_dampened += 1;
+                    break;
+                }
+            }
         }
-
-        total_reports += 1;
     }
 
-    try stdout.print("safe: {any}\n", .{total_reports - unsafe_reports});
-
-    try bw.flush();
+    std.debug.print("safe: {any}\n", .{safe_reports});
+    std.debug.print("safe (dampened): {any}\n", .{safe_reports + safe_dampened});
 }
